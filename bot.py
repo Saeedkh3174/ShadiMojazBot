@@ -2,7 +2,7 @@ import re
 import logging
 from aiogram import Bot, Dispatcher, types, executor
 
-API_TOKEN = "توکن_ربات_تو_اینجا_بذار"
+API_TOKEN = "7763325161:AAEuBI8jE1bZLa8VQjR6KRgtey_3rhMNgV4"
 
 # فقط اجازه به آیدی عددی تو
 ALLOWED_USER_ID = 7562729376
