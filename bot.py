@@ -12,7 +12,7 @@ REPLACEMENT_ID = '🆔@ShadiMojaz'
 
 logging.basicConfig(level=logging.INFO)
 
-bot = Bot(token=API_TOKEN)
+bot = Bot(token=API_TOKEN, parse_mode="HTML")
 dp = Dispatcher(bot)
 
 last_message = None
@@ -32,7 +32,7 @@ def clean_text(text):
         cleaned += f"\n\n{REPLACEMENT_ID}"
     return cleaned
 
-# دریافت همه نوع پیام
+# دریافت همه نوع پیام از جمله فوروارد
 @dp.message_handler(lambda message: message.from_user.id == AUTHORIZED_USER_ID and not message.text.isdigit())
 async def handle_main_message(message: types.Message):
     global last_message, last_media, last_caption
@@ -70,13 +70,15 @@ async def handle_time(message: types.Message):
             send_func = getattr(bot, f"send_{content_type}", None)
             if send_func:
                 file_id = getattr(last_media, content_type).file_id
-                await send_func(chat_id=DESTINATION_CHANNEL, **{content_type: file_id}, caption=last_caption or None)
+                kwargs = {content_type: file_id, "chat_id": DESTINATION_CHANNEL}
+                if last_caption:
+                    kwargs["caption"] = last_caption
+                await send_func(**kwargs)
             else:
                 await bot.send_message(DESTINATION_CHANNEL, "نوع فایل پشتیبانی نمی‌شود.")
 
     if time_str == "0":
         await send_to_channel()
-        await message.reply("پیام بلافاصله ارسال شد.")
     else:
         try:
             hour = int(time_str[:2])
@@ -85,7 +87,6 @@ async def handle_time(message: types.Message):
             if send_time < now:
                 send_time += timedelta(days=1)
             wait_time = (send_time - now).total_seconds()
-            await message.reply(f"پیام در ساعت {hour:02d}:{minute:02d} ارسال خواهد شد.")
             await asyncio.sleep(wait_time)
             await send_to_channel()
         except:
