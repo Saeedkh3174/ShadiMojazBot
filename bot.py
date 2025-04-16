@@ -1,82 +1,84 @@
 import asyncio
+import logging
+import re
+import datetime
+import pytz
 from aiogram import Bot, Dispatcher, types
 from aiogram.utils import executor
-import re
-from datetime import datetime, timedelta
-import pytz
+import os
 
-API_TOKEN = '7763325161:AAEuBI8jE1bZLa8VQjR6KRgtey_3rhMNgV4'
-ALLOWED_USER_ID = 7562729376
-DEST_CHANNEL = '@ShadiMojaz'
+API_TOKEN = os.getenv("API_TOKEN")  # توکن از متغیر محیطی
+ALLOWED_USER_ID = int(os.getenv("ALLOWED_USER_ID"))  # آیدی عددی شما
+CHANNEL_ID = "@ShadiMojaz"  # آیدی کانال مقصد
+
+# لاگر
+logging.basicConfig(level=logging.INFO)
 
 bot = Bot(token=API_TOKEN)
 dp = Dispatcher(bot)
 
-def clean_text(text):
-    lines = text.split('\n')
-    cleaned_lines = []
-    for line in lines:
-        if 'http' in line:
-            # حذف لینک و ایموجی‌های اون خط
-            line = re.sub(r'https?://\S+', '', line)
-            line = re.sub(r'[\U0001F600-\U0001F64F\U0001F300-\U0001F5FF\U0001F680-\U0001F6FF\U0001F1E0-\U0001F1FF]+', '', line)
-        cleaned_lines.append(line)
-    return '\n'.join(cleaned_lines).strip()
-
-def extract_time(text):
-    match = re.search(r'\b(\d{4})\b$', text.strip())
-    if match:
-        return match.group(1)
-    return None
 
 @dp.message_handler(commands=['start'])
 async def send_welcome(message: types.Message):
     if message.from_user.id != ALLOWED_USER_ID:
-        await message.reply("❌ شما اجازه استفاده از این ربات را ندارید.")
         return
-    await message.reply("👋 به ربات مدیریت کانال خوش آمدید.")
+    await message.reply("به ربات مدیریت کانال خوش آمدید 😊")
 
-@dp.message_handler(content_types=types.ContentType.ANY)
-async def handle_forward(message: types.Message):
+
+@dp.message_handler(content_types=types.ContentTypes.ANY)
+async def handle_message(message: types.Message):
     if message.from_user.id != ALLOWED_USER_ID:
         return
 
-    # دریافت متن پست فورواردی
-    if not message.forward_from_chat or not message.caption:
-        await message.reply("⚠️ لطفاً یک پست فوروارد شده با متن ارسال کنید.")
-        return
+    # استخراج متن یا کپشن
+    if message.caption:
+        content = message.caption
+    elif message.text:
+        content = message.text
+    else:
+        content = ""
 
-    raw_text = message.caption
-    media = message.photo or message.video or message.document
+    # حذف لینک‌های t.me
+    content = re.sub(r'https:\/\/t\.me\/[^\s]+', '', content)
 
-    # پردازش متن
-    scheduled_time = extract_time(raw_text)
-    cleaned_text = clean_text(raw_text)
-    cleaned_text += f"\n\n🔗 {DEST_CHANNEL}"
+    # حذف ایموجی و متن بعد از آن در خط لینک
+    content = re.sub(r'[🔗📎].*', '', content)
 
-    if scheduled_time:
-        try:
-            now = datetime.now(pytz.timezone("Asia/Tehran"))
-            send_time = now.replace(hour=int(scheduled_time[:2]), minute=int(scheduled_time[2:]), second=0, microsecond=0)
-            if send_time < now:
-                send_time += timedelta(days=1)
-            delay = (send_time - now).total_seconds()
-            await message.reply(f"⏰ پست زمان‌بندی شد برای ارسال در ساعت {scheduled_time[:2]}:{scheduled_time[2:]}")
-            await asyncio.sleep(delay)
-        except Exception as e:
-            await message.reply("❌ خطا در زمان‌بندی")
+    # بررسی و استخراج زمان‌بندی (فرمت 1120 یا 2330)
+    time_match = re.search(r'\b([01]\d|2[0-3])[0-5]\d\b', content)
+    send_time = None
+    if time_match:
+        time_str = time_match.group(0)
+        content = content.replace(time_str, '')  # حذف زمان از متن
+        now = datetime.datetime.now(pytz.timezone('Asia/Tehran'))
+        target_time = now.replace(hour=int(time_str[:2]), minute=int(time_str[2:]), second=0, microsecond=0)
+        if target_time < now:
+            target_time += datetime.timedelta(days=1)
+        send_time = target_time
 
-    try:
+    # افزودن لینک کانال مقصد
+    content = content.strip() + '\n\n🔗 @ShadiMojaz'
+
+    # تابع ارسال
+    async def send_post():
         if message.photo:
-            await bot.send_photo(chat_id=DEST_CHANNEL, photo=message.photo[-1].file_id, caption=cleaned_text)
+            await bot.send_photo(CHANNEL_ID, message.photo[-1].file_id, caption=content)
         elif message.video:
-            await bot.send_video(chat_id=DEST_CHANNEL, video=message.video.file_id, caption=cleaned_text)
-        elif message.document:
-            await bot.send_document(chat_id=DEST_CHANNEL, document=message.document.file_id, caption=cleaned_text)
+            await bot.send_video(CHANNEL_ID, message.video.file_id, caption=content)
+        elif message.text:
+            await bot.send_message(CHANNEL_ID, content)
         else:
-            await bot.send_message(chat_id=DEST_CHANNEL, text=cleaned_text)
-    except Exception as e:
-        await message.reply("❌ ارسال با خطا مواجه شد")
+            await message.reply("نوع پیام پشتیبانی نمی‌شود.")
+
+    # زمان‌بندی یا ارسال مستقیم
+    if send_time:
+        delay = (send_time - datetime.datetime.now(pytz.timezone('Asia/Tehran'))).total_seconds()
+        await message.reply(f"⏰ پست زمان‌بندی شد برای ساعت {send_time.strftime('%H:%M')}")
+        await asyncio.sleep(delay)
+        await send_post()
+    else:
+        await send_post()
+
 
 if __name__ == '__main__':
     executor.start_polling(dp, skip_updates=True)
