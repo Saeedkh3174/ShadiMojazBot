@@ -26,6 +26,8 @@ dp = Dispatcher(bot)
 premium_emoji_pattern = re.compile(r'<emoji[^>]+></emoji>')
 
 # حذف کل خط‌هایی که شامل @ یا لینک هستند و حذف ایموجی‌های پرمیوم
+# و همچنین حذف عکس از پیام‌ها
+
 def clean_text(text):
     lines = text.splitlines()
     cleaned_lines = []
@@ -52,8 +54,10 @@ async def handle_message(message: types.Message):
         cleaned_caption = clean_text(message.caption)
 
         if content_type == 'photo':
-            file_id = message.photo[-1].file_id
-        elif hasattr(message, content_type):
+            await bot.send_message(DESTINATION_CHANNEL, cleaned_caption)
+            return
+
+        if hasattr(message, content_type):
             file_id = getattr(message, content_type).file_id
         else:
             file_id = None
@@ -67,12 +71,14 @@ async def handle_message(message: types.Message):
             }
             await send_func(**kwargs)
         else:
-            await bot.send_message(DESTINATION_CHANNEL, "این نوع پیام پشتیبانی نمی‌شود.")
+            await bot.send_message(DESTINATION_CHANNEL, cleaned_caption)
 
     else:
         if content_type == 'photo':
-            file_id = message.photo[-1].file_id
-        elif hasattr(message, content_type):
+            # حذف ارسال عکس
+            return
+
+        if hasattr(message, content_type):
             file_id = getattr(message, content_type).file_id
         else:
             file_id = None
