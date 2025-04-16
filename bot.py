@@ -1,69 +1,84 @@
 import logging
-import re
 from aiogram import Bot, Dispatcher, types
-from aiogram.types import Message
 from aiogram.utils import executor
-from datetime import datetime, timedelta
 import asyncio
+import re
+from datetime import datetime, timedelta
 
 API_TOKEN = '7763325161:AAEuBI8jE1bZLa8VQjR6KRgtey_3rhMNgV4'
-OWNER_ID = 7562729376
-CHANNEL_USERNAME = '@ShadiMojaz'
+AUTHORIZED_USER_ID = 7562729376
+DESTINATION_CHANNEL = '@ShadiTestCh'
+REPLACEMENT_ID = '🆔@ShadiMojaz'
 
 logging.basicConfig(level=logging.INFO)
+
 bot = Bot(token=API_TOKEN)
 dp = Dispatcher(bot)
 
-pending_messages = {}
+last_message = None
 
-# تابعی برای حذف لینک‌ها و جایگزینی آیدی
+# حذف آی‌دی‌ها و جایگزینی
 def clean_message(text):
-    # حذف لینک کانال‌های دیگر
-    text = re.sub(r"https?://t\.me/\S+", "", text)
-    text = re.sub(r"@\w+", "", text)  # حذف @آیدی‌ها
-    text = re.sub(r"🆔@ShadiMojaz", "", text)  # حذف تکراری احتمالی
-    return text.strip() + f"\n\n🆔{CHANNEL_USERNAME}"
+    text = re.sub(r'🆔.*?(@\w+|\d+)', '', text)  # حذف آیدی فوروارد شده
+    text = re.sub(r'@[\w_]+', '', text)  # حذف آیدی‌های متنی
+    text = re.sub(r'https?://\S+', '', text)  # حذف لینک
+    text = text.strip()
 
-@dp.message_handler(lambda message: message.from_user.id == OWNER_ID)
-async def handle_message(message: Message):
-    global pending_messages
+    # فقط یک بار آیدی کانال مقصد اضافه شود
+    if REPLACEMENT_ID not in text:
+        text += f"\n\n{REPLACEMENT_ID}"
+    return text
 
-    # اگر پیام عددی بود (برای زمان‌بندی)
-    if message.text and message.text.isdigit():
-        last_msg = pending_messages.get(message.from_user.id)
-        if not last_msg:
-            await message.reply("هیچ پیامی برای زمان‌بندی وجود ندارد.")
-            return
+# پیام شروع
+@dp.message_handler(commands=['start'])
+async def send_welcome(message: types.Message):
+    if message.from_user.id != AUTHORIZED_USER_ID:
+        return
+    await message.reply("سلام! پیام مورد نظر رو بفرست، بعدش زمانش رو بفرست (مثل 2230 یا 0 برای ارسال فوری).")
 
-        if message.text == '0':
-            await bot.send_message(chat_id=CHANNEL_USERNAME, text=last_msg['text'], parse_mode='HTML')
-        else:
-            try:
-                hour = int(message.text[:2])
-                minute = int(message.text[2:])
-                now = datetime.now()
-                send_time = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
-                if send_time < now:
-                    send_time += timedelta(days=1)
-                delay = (send_time - now).total_seconds()
-                await message.reply(f"پیام در ساعت {message.text} ارسال خواهد شد.")
-                await asyncio.sleep(delay)
-                await bot.send_message(chat_id=CHANNEL_USERNAME, text=last_msg['text'], parse_mode='HTML')
-            except:
-                await message.reply("فرمت زمان نادرست است. مثلاً 1120 برای ساعت 11:20")
+# دریافت پیام اصلی
+@dp.message_handler(lambda message: message.from_user.id == AUTHORIZED_USER_ID and not message.text.isdigit())
+async def handle_main_message(message: types.Message):
+    global last_message
+    if message.forward_date or message.forward_from:
+        content = clean_message(message.text or '')
+    else:
+        content = clean_message(message.text or '')
+    last_message = content
+    await message.reply("زمان ارسال رو وارد کن (مثل 2230 یا 0 برای بلافاصله).")
 
-        pending_messages.pop(message.from_user.id, None)
+# دریافت زمان
+@dp.message_handler(lambda message: message.from_user.id == AUTHORIZED_USER_ID and message.text.isdigit())
+async def handle_time(message: types.Message):
+    global last_message
+    if not last_message:
+        await message.reply("لطفاً اول پیام رو بفرست بعد زمان رو.")
         return
 
-    # گرفتن متن اصلی پیام (چه فوروارد چه معمولی)
-    if message.forward_date:
-        text = message.text or message.caption or ""
-    else:
-        text = message.text or message.caption or ""
+    time_str = message.text.strip()
+    now = datetime.now()
 
-    cleaned = clean_message(text)
-    pending_messages[message.from_user.id] = {"text": cleaned}
-    await message.reply("پیام ذخیره شد. لطفاً زمان ارسال را (مثل 1120 یا 0) وارد کنید.")
+    if time_str == "0":
+        await bot.send_message(DESTINATION_CHANNEL, last_message)
+        await message.reply("پیام بلافاصله ارسال شد.")
+    else:
+        try:
+            hour = int(time_str[:2])
+            minute = int(time_str[2:])
+            send_time = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+
+            if send_time < now:
+                send_time += timedelta(days=1)
+
+            wait_time = (send_time - now).total_seconds()
+            await message.reply(f"پیام در ساعت {hour:02d}:{minute:02d} ارسال خواهد شد.")
+            await asyncio.sleep(wait_time)
+            await bot.send_message(DESTINATION_CHANNEL, last_message)
+        except:
+            await message.reply("زمان وارد شده معتبر نیست.")
+
+    last_message = None
 
 if __name__ == '__main__':
+    print("Starting bot...")
     executor.start_polling(dp, skip_updates=True)
