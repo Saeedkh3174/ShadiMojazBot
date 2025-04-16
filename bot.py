@@ -26,7 +26,6 @@ dp = Dispatcher(bot)
 premium_emoji_pattern = re.compile(r'<emoji[^>]+></emoji>')
 
 # حذف کل خط‌هایی که شامل @ یا لینک هستند و حذف ایموجی‌های پرمیوم
-# و همچنین حذف عکس از پیام‌ها
 
 def clean_text(text):
     lines = text.splitlines()
@@ -52,46 +51,10 @@ async def handle_message(message: types.Message):
 
     elif message.caption:
         cleaned_caption = clean_text(message.caption)
-
-        if content_type == 'photo':
-            await bot.send_message(DESTINATION_CHANNEL, cleaned_caption)
-            return
-
-        if hasattr(message, content_type):
-            file_id = getattr(message, content_type).file_id
-        else:
-            file_id = None
-
-        send_func = getattr(bot, f"send_{content_type}", None)
-        if send_func and file_id:
-            kwargs = {
-                content_type: file_id,
-                "chat_id": DESTINATION_CHANNEL,
-                "caption": cleaned_caption
-            }
-            await send_func(**kwargs)
-        else:
-            await bot.send_message(DESTINATION_CHANNEL, cleaned_caption)
+        await bot.send_message(DESTINATION_CHANNEL, cleaned_caption)
 
     else:
-        if content_type == 'photo':
-            # حذف ارسال عکس
-            return
-
-        if hasattr(message, content_type):
-            file_id = getattr(message, content_type).file_id
-        else:
-            file_id = None
-
-        send_func = getattr(bot, f"send_{content_type}", None)
-        if send_func and file_id:
-            kwargs = {
-                content_type: file_id,
-                "chat_id": DESTINATION_CHANNEL
-            }
-            await send_func(**kwargs)
-        else:
-            await bot.send_message(DESTINATION_CHANNEL, "این نوع پیام پشتیبانی نمی‌شود.")
+        await bot.send_message(DESTINATION_CHANNEL, "این نوع پیام پشتیبانی نمی‌شود.")
 
 async def on_startup(dp):
     await bot.set_webhook(WEBHOOK_URL)
