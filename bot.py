@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 
 API_TOKEN = '7763325161:AAEuBI8jE1bZLa8VQjR6KRgtey_3rhMNgV4'
 AUTHORIZED_USER_ID = 7562729376
-DESTINATION_CHANNEL = '@ShadiTestCh'
+DESTINATION_CHANNEL = '@ShadiMojaz'
 REPLACEMENT_ID = '🆔@ShadiMojaz'
 
 logging.basicConfig(level=logging.INFO)
