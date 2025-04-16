@@ -43,9 +43,16 @@ async def handle_message(message: types.Message):
     # اگر پیام دارای کپشن است (مانند عکس، ویدیو، فایل و ...)
     elif message.caption:
         cleaned_caption = clean_text(message.caption)
-        file_id = getattr(message, content_type).file_id
+
+        if content_type == 'photo':
+            file_id = message.photo[-1].file_id
+        elif hasattr(message, content_type):
+            file_id = getattr(message, content_type).file_id
+        else:
+            file_id = None
+
         send_func = getattr(bot, f"send_{content_type}", None)
-        if send_func:
+        if send_func and file_id:
             kwargs = {
                 content_type: file_id,
                 "chat_id": DESTINATION_CHANNEL,
@@ -57,9 +64,15 @@ async def handle_message(message: types.Message):
 
     # پیام‌های بدون متن یا کپشن (مثل استیکر، ویس بدون توضیح و ...)
     else:
-        file_id = getattr(message, content_type).file_id
+        if content_type == 'photo':
+            file_id = message.photo[-1].file_id
+        elif hasattr(message, content_type):
+            file_id = getattr(message, content_type).file_id
+        else:
+            file_id = None
+
         send_func = getattr(bot, f"send_{content_type}", None)
-        if send_func:
+        if send_func and file_id:
             kwargs = {
                 content_type: file_id,
                 "chat_id": DESTINATION_CHANNEL
