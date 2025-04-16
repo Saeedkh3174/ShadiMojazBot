@@ -1,91 +1,53 @@
 import logging
-import re
 from aiogram import Bot, Dispatcher, types
-from aiogram.types import ParseMode
+from aiogram.utils import executor
 from aiogram.dispatcher.filters import CommandStart
-from aiogram.dispatcher import FSMContext
-from aiogram.contrib.fsm_storage.memory import MemoryStorage
-from aiogram.utils.executor import start_webhook
+import re
+import os
 
-API_TOKEN = "7763325161:AAEuBI8jE1bZLa8VQjR6KRgtey_3rhMNgV4"
-ALLOWED_USER_ID = 7562729376
-DESTINATION_CHANNEL = "@ShadiMojaz"
-WEBHOOK_HOST = 'https://your-render-url.onrender.com'
-WEBHOOK_PATH = f'/webhook/{API_TOKEN}'
-WEBHOOK_URL = f"{WEBHOOK_HOST}{WEBHOOK_PATH}"
-WEBAPP_HOST = "0.0.0.0"
-WEBAPP_PORT = 10000
+API_TOKEN = os.getenv("BOT_TOKEN")  # اگه تو محیط render گذاشتی
 
-bot = Bot(token=API_TOKEN)
-storage = MemoryStorage()
-dp = Dispatcher(bot, storage=storage)
 logging.basicConfig(level=logging.INFO)
 
-def clean_text(text):
-    # حذف آیدی‌ها و لینک کانال‌ها
-    text = re.sub(r'(@\w+)', '', text)  # حذف آیدی‌ها
-    text = re.sub(r'https://t\.me/\w+', '', text)  # حذف لینک کانال‌ها
-    # اضافه کردن فقط یک بار لینک و آیدی خودمون
-    text = text.strip()
-    if DESTINATION_CHANNEL not in text:
-        text += f"\n\n🆔{DESTINATION_CHANNEL}\nhttps://t.me/{DESTINATION_CHANNEL[1:]}"
-    return text
+bot = Bot(token=API_TOKEN, parse_mode=types.ParseMode.HTML)
+dp = Dispatcher(bot)
 
-@dp.message_handler(CommandStart())
-async def start_handler(message: types.Message):
-    if message.from_user.id != ALLOWED_USER_ID:
-        return
-    await message.answer("به ربات مدیریت کانال خوش آمدید.")
+ALLOWED_USER_ID = 7562729376  # آیدی عددی خودت
+CHANNEL_LINK = "🆔@ShadiMojaz"
 
-@dp.message_handler(content_types=types.ContentTypes.ANY)
-async def handle_post(message: types.Message, state: FSMContext):
-    if message.from_user.id != ALLOWED_USER_ID:
-        return
+def clean_caption(caption):
+    if not caption:
+        return CHANNEL_LINK
+    # حذف تمام @username ها
+    caption = re.sub(r'@\w+', '', caption)
+    # حذف لینک‌ها
+    caption = re.sub(r'https?://\S+', '', caption)
+    # اضافه کردن لینک کانال فقط یک‌بار
+    if CHANNEL_LINK not in caption:
+        caption += f"\n\n{CHANNEL_LINK}"
+    return caption.strip()
 
-    if message.text and re.fullmatch(r"\d{4}", message.text.strip()):
-        await state.update_data(schedule_time=message.text.strip())
-        await message.answer(f"⏰ زمان برنامه‌ریزی ثبت شد: {message.text.strip()}")
-        return
-
-    user_data = await state.get_data()
-    schedule_time = user_data.get("schedule_time")
-    await state.finish()
-
-    # محتوای متنی پاک‌سازی‌شده
-    caption = message.caption or message.text or ""
-    caption = clean_text(caption)
-
-    # ارسال پست به کانال
+@dp.message_handler(lambda message: message.from_user.id == ALLOWED_USER_ID)
+async def handle_message(message: types.Message):
     try:
+        caption = clean_caption(message.caption or message.text)
         if message.photo:
-            await bot.send_photo(DESTINATION_CHANNEL, message.photo[-1].file_id, caption=caption, parse_mode=ParseMode.HTML)
+            await bot.send_photo(chat_id=message.chat.id, photo=message.photo[-1].file_id, caption=caption)
         elif message.video:
-            await bot.send_video(DESTINATION_CHANNEL, message.video.file_id, caption=caption, parse_mode=ParseMode.HTML)
-        elif message.text:
-            await bot.send_message(DESTINATION_CHANNEL, caption, parse_mode=ParseMode.HTML)
+            await bot.send_video(chat_id=message.chat.id, video=message.video.file_id, caption=caption)
         else:
-            await bot.send_message(DESTINATION_CHANNEL, "پستی قابل ارسال نبود.")
+            await bot.send_message(chat_id=message.chat.id, text=caption)
     except Exception as e:
-        await message.answer(f"خطا در ارسال پست: {e}")
+        logging.error(f"Error: {e}")
 
-async def on_startup(dp):
-    await bot.set_webhook(WEBHOOK_URL)
+@dp.message_handler(commands=["start"])
+async def start_cmd(message: types.Message):
+    await message.reply("✅ ربات مدیریت کانال فعال است.")
 
-async def on_shutdown(dp):
-    await bot.delete_webhook()
-
-if __name__ == "__main__":
-    from aiogram import executor
-    from aiohttp import web
-
-    async def webhook_handler(request):
-        request_body_dict = await request.json()
-        update = types.Update.to_object(request_body_dict)
-        await dp.process_update(update)
-        return web.Response()
-
-    app = web.Application()
-    app.router.add_post(WEBHOOK_PATH, webhook_handler)
-    app.on_startup.append(lambda app: on_startup(dp))
-    app.on_shutdown.append(lambda app: on_shutdown(dp))
-    web.run_app(app, host=WEBAPP_HOST, port=WEBAPP_PORT)
+if __name__ == '__main__':
+    try:
+        executor.start_polling(dp, skip_updates=True)
+    finally:
+        # وقتی ربات متوقف میشه، session رو می‌بندیم
+        import asyncio
+        asyncio.run(bot.session.close())
