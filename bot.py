@@ -32,12 +32,6 @@ def clean_text(text):
         cleaned += f"\n\n{REPLACEMENT_ID}"
     return cleaned
 
-@dp.message_handler(commands=['start'])
-async def send_welcome(message: types.Message):
-    if message.from_user.id != AUTHORIZED_USER_ID:
-        return
-    await message.reply("سلام! پیام مورد نظر رو بفرست، بعدش زمانش رو بفرست (مثل 2230 یا 0 برای ارسال فوری).")
-
 # دریافت همه نوع پیام
 @dp.message_handler(lambda message: message.from_user.id == AUTHORIZED_USER_ID and not message.text.isdigit())
 async def handle_main_message(message: types.Message):
@@ -57,15 +51,12 @@ async def handle_main_message(message: types.Message):
         last_caption = ''
         last_message = None
 
-    await message.reply("زمان ارسال رو وارد کن (مثل 2230 یا 0 برای بلافاصله).")
-
 # دریافت زمان ارسال
 @dp.message_handler(lambda message: message.from_user.id == AUTHORIZED_USER_ID and message.text.isdigit())
 async def handle_time(message: types.Message):
     global last_message, last_media, last_caption
 
     if not last_message and not last_media:
-        await message.reply("لطفاً اول پیام یا فایل رو بفرست بعد زمان رو.")
         return
 
     time_str = message.text.strip()
@@ -104,10 +95,5 @@ async def handle_time(message: types.Message):
     last_media = None
     last_caption = None
 
-# پیام خوش‌آمدگویی هنگام روشن شدن ربات
-async def on_startup(dp):
-    await bot.send_message(AUTHORIZED_USER_ID, "✅ ربات روشن شد و آماده دریافت پیام‌هاته!")
-
 if __name__ == '__main__':
-    print("✅ ربات داره روشن میشه...")
-    executor.start_polling(dp, skip_updates=True, on_startup=on_startup)
+    executor.start_polling(dp, skip_updates=True)
